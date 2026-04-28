@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wayback Restaurator</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1117;--surf:#161b22;--surf2:#1c2128;--surf3:#21262d;
+  --border:#30363d;--border2:#444c56;
+  --text:#e6edf3;--muted:#7d8590;--faint:#3d444d;
+  --green:#3fb950;--green-dim:#0d2119;--green-border:#1a4228;
+  --red:#f85149;--red-dim:#1f0d0d;--red-border:#4a1818;
+  --blue:#58a6ff;--blue-dim:#0d1b2e;--blue-border:#1a3555;
+  --amber:#d29922;--amber-dim:#1e1608;--amber-border:#4a3808;
+  --purple:#bc8cff;
+  --r:6px;--rsm:4px;
+}
+html,body{height:100%;overflow:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+     background:var(--bg);color:var(--text);
+     display:flex;flex-direction:column;font-size:13px;user-select:none}
+
+/* ═══ TOPBAR ══════════════════════════════════════════════ */
+#topbar{
+  background:var(--surf);border-bottom:1px solid var(--border);
+  padding:8px 14px;display:flex;align-items:center;gap:8px;
+  flex-shrink:0;flex-wrap:wrap;min-height:46px;
+}
+.logo{font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;
+      display:flex;align-items:center;gap:6px;margin-right:4px}
+.logo-badge{background:var(--green-dim);border:1px solid var(--green-border);
+            border-radius:var(--rsm);padding:3px 6px;font-size:11px;color:var(--green)}
+#url-input{flex:1;min-width:220px;font-size:12px;padding:6px 10px;
+           background:var(--bg);color:var(--text);border:1px solid var(--border2);
+           border-radius:var(--rsm);outline:none;font-family:'SF Mono','Fira Code',monospace}
+#url-input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(88,166,255,.12)}
+.setting{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);white-space:nowrap}
+.setting input{width:48px;font-size:12px;padding:5px 6px;background:var(--bg);color:var(--text);
+               border:1px solid var(--border2);border-radius:var(--rsm);outline:none;text-align:center}
+.setting input:focus{border-color:var(--blue)}
+.setting label{font-size:11px;color:var(--faint)}
+.btn{font-size:12px;padding:6px 12px;border-radius:var(--rsm);border:1px solid var(--border2);
+     background:var(--surf2);color:var(--text);cursor:pointer;white-space:nowrap;
+     display:inline-flex;align-items:center;gap:5px;font-family:inherit;
+     transition:background .1s,border-color .1s}
+.btn:hover:not(:disabled){background:var(--surf3);border-color:var(--border2)}
+.btn:disabled{opacity:.3;cursor:not-allowed}
+.btn-go{background:var(--green-dim);border-color:var(--green-border);color:var(--green);font-weight:600}
+.btn-go:hover:not(:disabled){background:#0e2b1e}
+.btn-stop{background:var(--red-dim);border-color:var(--red-border);color:var(--red)}
+.btn-stop:hover:not(:disabled){background:#2a1010}
+.btn-blue{background:var(--blue-dim);border-color:var(--blue-border);color:var(--blue)}
+
+/* ═══ MAIN AREA ═══════════════════════════════════════════ */
+#main{flex:1;display:flex;overflow:hidden;min-height:0}
+
+/* ═══ PANELS ══════════════════════════════════════════════ */
+.panel{display:flex;flex-direction:column;overflow:hidden;background:var(--surf);min-width:0;min-height:0}
+.panel-hdr{
+  font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+  padding:7px 12px 6px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:8px;
+}
+.panel-hdr-actions{display:flex;gap:4px}
+
+/* ═══ SPLITTER ════════════════════════════════════════════ */
+.splitter-v{width:5px;background:var(--border);cursor:col-resize;flex-shrink:0;
+            transition:background .15s;position:relative;z-index:10}
+.splitter-v:hover,.splitter-v.dragging{background:var(--blue)}
+.splitter-h{height:5px;background:var(--border);cursor:row-resize;flex-shrink:0;
+            transition:background .15s;position:relative;z-index:10}
+.splitter-h:hover,.splitter-h.dragging{background:var(--blue)}
+
+/* ═══ LEFT PANEL ══════════════════════════════════════════ */
+#left{width:280px;min-width:160px;max-width:600px}
+
+/* Stats bar */
+#stats-bar{display:flex;gap:5px;padding:7px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
+.chip{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:500;cursor:default}
+.chip-g{background:var(--green-dim);color:var(--green);border:1px solid var(--green-border)}
+.chip-r{background:var(--red-dim);color:var(--red);border:1px solid var(--red-border)}
+.chip-b{background:var(--blue-dim);color:var(--blue);border:1px solid var(--blue-border)}
+.chip-a{background:var(--amber-dim);color:var(--amber);border:1px solid var(--amber-border)}
+
+/* Log area */
+#log-wrap{display:flex;flex-direction:column;overflow:hidden;flex:1;min-height:80px}
+#log-area{flex:1;overflow-y:auto;padding:4px 0;
+          font-size:11px;line-height:1.65;font-family:'SF Mono','Fira Code','Consolas',monospace}
+.log-line{padding:1px 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default}
+.log-line:hover{background:var(--surf2);white-space:normal;overflow:visible}
+.l-ok{color:var(--green)}.l-err{color:var(--red)}.l-info{color:var(--muted)}
+.l-warn{color:var(--amber)}.l-new{color:var(--blue)}.l-skip{color:var(--faint)}
+
+/* Pages tree */
+#tree-wrap{display:flex;flex-direction:column;overflow:hidden;min-height:80px}
+#tree-scroll{flex:1;overflow-y:auto}
+.tree-node{
+  display:flex;align-items:center;gap:7px;padding:5px 12px;
+  font-size:12px;color:var(--muted);cursor:pointer;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  transition:background .08s;border-bottom:1px solid transparent;
+}
+.tree-node:hover{background:var(--surf2);color:var(--text)}
+.tree-node.active{background:var(--green-dim);color:var(--green);border-bottom-color:var(--green-border)}
+.tree-node.err{color:var(--red)}
+.tree-node.fallback{color:var(--amber)}
+.tree-label{flex:1;overflow:hidden;text-overflow:ellipsis}
+.tree-meta{font-size:10px;color:var(--faint);flex-shrink:0}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.dot-ok{background:var(--green)}.dot-err{background:var(--red)}
+.dot-q{background:var(--blue);opacity:.4}.dot-crawl{background:var(--amber);animation:pulse .8s ease-in-out infinite}
+.dot-fallback{background:var(--amber)}
+@keyframes pulse{50%{opacity:.15}}
+
+/* ═══ RIGHT PANEL ═════════════════════════════════════════ */
+#right{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg)}
+
+/* Preview bar */
+#preview-bar{
+  background:var(--surf);border-bottom:1px solid var(--border);
+  padding:6px 12px;display:flex;align-items:center;gap:7px;
+  flex-shrink:0;flex-wrap:wrap;
+}
+#preview-crumb{
+  flex:1;font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;font-family:monospace;min-width:0;
+}
+#preview-crumb span{color:var(--faint)}
+#preview-crumb .seg{color:var(--text)}
+#preview-crumb .seg:hover{color:var(--blue);cursor:pointer;text-decoration:underline}
+
+/* Source toggle */
+#view-toggle{display:flex;border:1px solid var(--border2);border-radius:var(--rsm);overflow:hidden;flex-shrink:0}
+.vt-btn{font-size:11px;padding:4px 9px;background:var(--surf2);color:var(--muted);
+        cursor:pointer;border:none;font-family:inherit;transition:background .1s,color .1s}
+.vt-btn:hover{color:var(--text)}
+.vt-btn.active{background:var(--surf3);color:var(--text)}
+
+/* Preview content */
+#preview-content{flex:1;overflow:hidden;min-height:0;position:relative}
+#preview-frame{position:absolute;inset:0;border:none;background:#fff;display:none;width:100%;height:100%}
+#source-view{
+  position:absolute;inset:0;overflow:auto;display:none;
+  font-size:11px;font-family:'SF Mono','Fira Code',monospace;
+  line-height:1.6;color:#adbac7;padding:12px 16px;white-space:pre;
+  background:var(--bg);
+}
+#empty-state{
+  position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:12px;
+  color:var(--faint);pointer-events:none;
+}
+.empty-icon{font-size:42px;opacity:.25}
+.empty-text{font-size:13px;text-align:center;line-height:1.6;max-width:280px}
+
+/* ═══ ASSET DRAWER ════════════════════════════════════════ */
+#asset-panel{display:flex;flex-direction:column;overflow:hidden;background:var(--surf);min-height:60px}
+
+.drawer-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--surf2)}
+.dtab{font-size:12px;padding:7px 14px;cursor:pointer;color:var(--muted);
+      border-right:1px solid var(--border);transition:color .1s;white-space:nowrap;user-select:none;
+      display:flex;align-items:center;gap:5px}
+.dtab:hover{color:var(--text)}
+.dtab.active{color:var(--text);background:var(--surf);border-bottom:2px solid var(--green);margin-bottom:-1px}
+.dtab-count{font-size:10px;background:var(--surf3);border-radius:10px;padding:1px 6px;color:var(--faint)}
+.dtab.active .dtab-count{color:var(--muted)}
+
+.drawer-toolbar{
+  display:flex;align-items:center;gap:6px;padding:5px 10px;
+  border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;
+}
+.drawer-info{font-size:11px;color:var(--muted);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btn-xs{font-size:11px;padding:3px 9px;border-radius:var(--rsm);border:1px solid var(--border2);
+        background:var(--surf2);color:var(--muted);cursor:pointer;font-family:inherit;
+        transition:background .1s,color .1s;white-space:nowrap}
+.btn-xs:hover:not(:disabled){background:var(--surf3);color:var(--text)}
+.btn-xs:disabled{opacity:.3;cursor:not-allowed}
+
+.prog-wrap{height:2px;background:var(--border);flex-shrink:0}
+.prog-bar{height:2px;background:var(--green);width:0%;transition:width .25s}
+
+#asset-scroll{flex:1;overflow-y:auto}
+.asset-empty{padding:16px 14px;font-size:11px;color:var(--faint);font-style:italic;text-align:center}
+
+.asset-row{
+  display:flex;align-items:center;gap:9px;padding:5px 10px;
+  border-bottom:1px solid var(--border);transition:background .08s;
+}
+.asset-row:hover{background:var(--surf2)}
+.asset-thumb{width:30px;height:30px;object-fit:cover;border:1px solid var(--border2);
+             border-radius:var(--rsm);flex-shrink:0;background:var(--bg)}
+.asset-ph{width:30px;height:30px;background:var(--surf2);border:1px solid var(--border);
+          border-radius:var(--rsm);flex-shrink:0;display:flex;align-items:center;
+          justify-content:center;font-size:13px;color:var(--faint)}
+.asset-info{flex:1;min-width:0}
+.asset-name{font-size:12px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.asset-url{font-size:10px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace}
+.asset-sz{font-size:11px;min-width:52px;text-align:right}
+.sz-ok{color:var(--green)}.sz-err{color:var(--red)}.sz-wait{color:var(--faint)}
+.sz-loading{color:var(--amber);animation:pulse .8s ease-in-out infinite}
+
+/* scrollbars */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--border2)}
+</style>
+</head>
+<body>
+
+<!-- ═══ TOPBAR ═══════════════════════════════════════════════ -->
+<div id="topbar">
+  <div class="logo">
+    <div class="logo-badge">⏮</div>
+    Wayback Restaurator
+  </div>
+  <input id="url-input" type="text"
+    value="https://web.archive.org/web/19970415220425/http://www.bern.ch/"
+    placeholder="https://web.archive.org/web/TIMESTAMP/http://...">
+  <div class="setting">
+    <label>Tiefe</label>
+    <input id="depth-input" type="number" value="2" min="1" max="5" title="Wie viele Link-Ebenen folgen">
+  </div>
+  <div class="setting">
+    <label>Max. Seiten</label>
+    <input id="max-input" type="number" value="30" min="1" max="200">
+  </div>
+  <button class="btn btn-go"   id="start-btn" onclick="startCrawl()">▶ Starten</button>
+  <button class="btn btn-stop" id="stop-btn"  onclick="stopCrawl()" disabled>■ Stopp</button>
+  <button class="btn btn-blue" id="zip-btn"   onclick="downloadAllPages()" style="display:none">⬇ ZIP</button>
+</div>
+
+<!-- ═══ MAIN ═════════════════════════════════════════════════ -->
+<div id="main">
+
+  <!-- LEFT: log + pages -->
+  <div class="panel" id="left">
+
+    <!-- Log -->
+    <div id="log-wrap">
+      <div class="panel-hdr">
+        Crawler-Log
+        <div class="panel-hdr-actions">
+          <button class="btn-xs" onclick="clearLog()">Leeren</button>
+        </div>
+      </div>
+      <div id="stats-bar">
+        <span class="chip chip-g" id="cnt-ok">0 OK</span>
+        <span class="chip chip-r" id="cnt-err">0 Fehler</span>
+        <span class="chip chip-b" id="cnt-q">0 Queue</span>
+      </div>
+      <div id="log-area"></div>
+    </div>
+
+    <!-- Horizontal splitter between log and pages -->
+    <div class="splitter-h" id="sh-log-tree"></div>
+
+    <!-- Pages tree -->
+    <div id="tree-wrap">
+      <div class="panel-hdr">
+        Gefundene Seiten
+        <span style="font-size:11px;color:var(--faint);font-weight:400" id="page-count"></span>
+      </div>
+      <div id="tree-scroll"></div>
+    </div>
+
+  </div>
+
+  <!-- Vertical splitter -->
+  <div class="splitter-v" id="sv-main"></div>
+
+  <!-- RIGHT: preview + assets -->
+  <div id="right">
+
+    <!-- Preview bar -->
+    <div id="preview-bar">
+      <div id="preview-crumb">Keine Seite geladen</div>
+      <div id="view-toggle">
+        <button class="vt-btn active" id="vt-preview" onclick="setView('preview')">Vorschau</button>
+        <button class="vt-btn"        id="vt-source"  onclick="setView('source')">Quellcode</button>
+      </div>
+      <button class="btn" id="dl-page-btn" onclick="dlCurrentPage()" style="display:none">⬇ HTML</button>
+      <button class="btn" id="dl-assets-btn" onclick="fetchAllAssets()" style="display:none">⬇ Assets laden</button>
+    </div>
+
+    <!-- Preview content -->
+    <div id="preview-content">
+      <div id="empty-state">
+        <div class="empty-icon">🕰</div>
+        <div class="empty-text">Archive.org-URL eingeben und auf<br><strong>Starten</strong> klicken.<br><br>Der Crawler restauriert alle gefundenen Seiten automatisch.</div>
+      </div>
+      <iframe id="preview-frame"></iframe>
+      <div id="source-view"></div>
+    </div>
+
+    <!-- Horizontal splitter between preview and assets -->
+    <div class="splitter-h" id="sh-preview-assets"></div>
+
+    <!-- Asset drawer -->
+    <div id="asset-panel">
+      <div class="drawer-tabs">
+        <div class="dtab active" id="atab-images" onclick="showAssetTab('images')">
+          🖼 Bilder <span class="dtab-count" id="acnt-images">0</span>
+        </div>
+        <div class="dtab" id="atab-files" onclick="showAssetTab('files')">
+          📄 Dateien <span class="dtab-count" id="acnt-files">0</span>
+        </div>
+      </div>
+      <div class="drawer-toolbar">
+        <span class="drawer-info" id="asset-info">—</span>
+        <button class="btn-xs" onclick="fetchAllAssets()">⬇ Alle laden</button>
+        <button class="btn-xs" onclick="dlAllAssets()">💾 Alle speichern</button>
+      </div>
+      <div class="prog-wrap"><div class="prog-bar" id="asset-prog"></div></div>
+      <div id="asset-scroll">
+        <div id="asset-list-images"></div>
+        <div id="asset-list-files" style="display:none"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ─── JSZip ────────────────────────────────────────────────────────
+const _s=document.createElement('script');
+_s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+document.head.appendChild(_s);
+
+// ─── SPLITTER LOGIC ───────────────────────────────────────────────
+function makeSplitterV(splitterEl, leftEl) {
+  let dragging=false, startX=0, startW=0;
+  splitterEl.addEventListener('mousedown', e => {
+    dragging=true; startX=e.clientX; startW=leftEl.offsetWidth;
+    splitterEl.classList.add('dragging');
+    document.body.style.cursor='col-resize';
+    document.body.style.userSelect='none';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const w = Math.max(160, Math.min(startW + e.clientX - startX, window.innerWidth * 0.6));
+    leftEl.style.width = w + 'px';
+    leftEl.style.minWidth = '0';
+    leftEl.style.maxWidth = 'none';
+    leftEl.style.flex = 'none';
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging=false;
+    splitterEl.classList.remove('dragging');
+    document.body.style.cursor='';
+    document.body.style.userSelect='';
+  });
+}
+
+function makeSplitterH(splitterEl, topEl, containerId, storageKey) {
+  let dragging=false, startY=0, startH=0;
+  splitterEl.addEventListener('mousedown', e => {
+    dragging=true; startY=e.clientY; startH=topEl.offsetHeight;
+    splitterEl.classList.add('dragging');
+    document.body.style.cursor='row-resize';
+    document.body.style.userSelect='none';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const container = document.getElementById(containerId);
+    const maxH = container.offsetHeight - 80;
+    const h = Math.max(60, Math.min(startH + e.clientY - startY, maxH));
+    topEl.style.flex = 'none';
+    topEl.style.height = h + 'px';
+    topEl.style.minHeight = '0';
+    topEl.style.maxHeight = 'none';
+    if (storageKey) localStorage.setItem(storageKey, h);
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging=false;
+    splitterEl.classList.remove('dragging');
+    document.body.style.cursor='';
+    document.body.style.userSelect='';
+  });
+}
+
+// Init splitters after DOM ready
+window.addEventListener('DOMContentLoaded', () => {
+  makeSplitterV(document.getElementById('sv-main'), document.getElementById('left'));
+  makeSplitterH(document.getElementById('sh-log-tree'), document.getElementById('log-wrap'), 'left', 'wb_log_h');
+  makeSplitterH(document.getElementById('sh-preview-assets'), document.getElementById('preview-content'), 'right', 'wb_prev_h');
+
+  // Restore saved heights
+  const lh = localStorage.getItem('wb_log_h');
+  if (lh) { const lw = document.getElementById('log-wrap'); lw.style.flex='none'; lw.style.height=lh+'px'; lw.style.minHeight='0'; }
+  const ph = localStorage.getItem('wb_prev_h');
+  if (ph) { const pc = document.getElementById('preview-content'); pc.style.flex='none'; pc.style.height=ph+'px'; pc.style.minHeight='0'; }
+});
+
+// ─── PROXIES ──────────────────────────────────────────────────────
+const PROXIES = [
+  u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+  u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+  u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+  u => `https://thingproxy.freeboard.io/fetch/${u}`,
+];
+
+// ─── STATE ────────────────────────────────────────────────────────
+let crawling=false, stopRequested=false;
+let pages={}, queue=[], visited=new Set();
+let currentPageUrl=null, currentAssetTab='images', currentView='preview';
+let globalTimestamp='', globalBase='';
+
+const RETRY_DELAYS = [1200, 4000, 10000, 25000];
+const MAX_RETRIES = 3;
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+
+// ─── FETCH ────────────────────────────────────────────────────────
+async function fetchWithRetry(url, binary=false) {
+  let attempt=0;
+  while (true) {
+    for (let pi=0; pi<PROXIES.length; pi++) {
+      try {
+        const r = await fetch(PROXIES[pi](url), { signal: AbortSignal.timeout(15000) });
+        if (r.status===429||r.status===503) {
+          const w=RETRY_DELAYS[Math.min(attempt,RETRY_DELAYS.length-1)];
+          logLine(`  ⏳ Rate limit — warte ${w/1000}s (Versuch ${attempt+1})`, 'l-warn');
+          await sleep(w); break;
+        }
+        if (!r.ok) continue;
+        if (binary) { const b=await r.blob(); if(b.size>0) return b; }
+        else        { const t=await r.text(); if(t&&t.length>100) return t; }
+      } catch(e) {
+        if ((e.name==='TypeError'||e.name==='AbortError') && pi===PROXIES.length-1) {
+          if (attempt>=MAX_RETRIES) throw new Error(`Netzwerkfehler: ${e.message}`);
+          const w=RETRY_DELAYS[Math.min(attempt,RETRY_DELAYS.length-1)];
+          logLine(`  ⚠ Netzwerkfehler — warte ${w/1000}s (Versuch ${attempt+1})`, 'l-warn');
+          await sleep(w);
+        }
+      }
+    }
+    attempt++;
+    if (attempt>MAX_RETRIES) throw new Error(`Fehlgeschlagen nach ${MAX_RETRIES} Versuchen`);
+  }
+}
+const fetchText   = url => fetchWithRetry(url, false);
+const fetchBinary = async url => { try { return await fetchWithRetry(url, true); } catch(e) { return null; } };
+
+// ─── LOG ──────────────────────────────────────────────────────────
+function logLine(msg, cls='l-info') {
+  const a=document.getElementById('log-area');
+  const d=document.createElement('div');
+  d.className='log-line '+cls;
+  d.textContent=msg;
+  a.appendChild(d);
+  a.scrollTop=a.scrollHeight;
+}
+function clearLog() { document.getElementById('log-area').innerHTML=''; }
+
+// ─── STATS ────────────────────────────────────────────────────────
+function updateStats() {
+  const vals=Object.values(pages);
+  const ok=vals.filter(p=>p.status==='ok').length;
+  const err=vals.filter(p=>p.status==='err').length;
+  const fallback=vals.filter(p=>p.status==='fallback').length;
+  document.getElementById('cnt-ok').textContent  = ok+' OK';
+  document.getElementById('cnt-err').textContent = err+' Fehler';
+  document.getElementById('cnt-q').textContent   = queue.length+' Queue';
+  document.getElementById('page-count').textContent = (ok+fallback+err)+' Seiten'+(fallback?' (+'+fallback+' Fallback)':'');
+}
+
+// ─── URL UTILS ────────────────────────────────────────────────────
+function parseArchiveUrl(url) {
+  const m=url.match(/web\.archive\.org\/web\/(\d+)\/(https?:\/\/.+)/);
+  return m ? {ts:m[1], original:m[2]} : null;
+}
+function buildArchiveUrl(orig, ts) { return `https://web.archive.org/web/${ts}/${orig}`; }
+function isSameHost(a,b) { try{return new URL(a).hostname===new URL(b).hostname}catch(e){return false} }
+
+function isRelevantPage(originalUrl, baseHost) {
+  try { if (new URL(originalUrl).hostname!==baseHost) return false; } catch(e) { return false; }
+  try { if (/\/web\/\d{14}/.test(new URL(originalUrl).pathname)) return false; } catch(e) {}
+  if (originalUrl.includes('web.archive.org')||originalUrl.includes('archive.org/web')) return false;
+  try {
+    const path=new URL(originalUrl).pathname.toLowerCase();
+    if (path.startsWith('/_static')||path.startsWith('/includes')) return false;
+  } catch(e) {}
+  return true;
+}
+
+// ─── CLEAN HTML ───────────────────────────────────────────────────
+function cleanHTML(rawHTML, originalBase) {
+  const doc=new DOMParser().parseFromString(rawHTML,'text/html');
+  const ap=/https?:\/\/web\.archive\.org\/web\/[^/]+\//g;
+  // Collect external CSS links before removing/cleaning them
+  const cssLinks=[];
+  doc.querySelectorAll('link[rel~="stylesheet"]').forEach(el=>{
+    const href=el.getAttribute('href');
+    if(!href||href.includes('web-static.archive.org')) return;
+    // Resolve archive URL for fetching (with cs_ modifier)
+    let archiveHref=href, cleanedHref=href;
+    const mF=href.match(/https?:\/\/web\.archive\.org\/web\/(\d+)[a-z_]*\/(https?:\/\/.+)/i);
+    const mR=href.match(/^\/web\/(\d+)[a-z_]*\/(https?:\/\/.+)/i);
+    if(mF){
+      archiveHref=`https://web.archive.org/web/${mF[1]}cs_/${mF[2]}`;
+      cleanedHref=mF[2];
+    } else if(mR){
+      archiveHref=`https://web.archive.org/web/${mR[1]}cs_/${mR[2]}`;
+      cleanedHref=mR[2];
+    } else {
+      let orig=href.replace(ap,'');
+      if(!orig.startsWith('http')) try{orig=new URL(orig,originalBase).href}catch(e){return}
+      archiveHref=`https://web.archive.org/web/${globalTimestamp}cs_/${orig}`;
+      cleanedHref=orig;
+    }
+    cssLinks.push({rawHref:href, cleanedHref, archiveHref});
+  });
+
+  // Remove ALL scripts (archive.org injections + any original JS — static only)
+  doc.querySelectorAll('script').forEach(el=>el.remove());
+
+  // Remove all inline event handlers (onclick, onload, onmouseover, etc.)
+  doc.querySelectorAll('*').forEach(el=>{
+    Array.from(el.attributes).forEach(attr=>{
+      if(attr.name.startsWith('on')) el.removeAttribute(attr.name);
+    });
+    // Remove javascript: hrefs
+    ['href','src','action'].forEach(a=>{
+      const v=el.getAttribute(a);
+      if(v&&v.trim().toLowerCase().startsWith('javascript:')) el.removeAttribute(a);
+    });
+  });
+
+  // Remove <noscript> blocks (irrelevant without JS)
+  doc.querySelectorAll('noscript').forEach(el=>el.remove());
+
+  // Remove archive.org toolbar elements
+  ['#wm-ipp-base','#donato','#wm-ipp','#wm-toolbar','#wm-ipp-print',
+   'div[id^="wm-"]','div[class^="wm-"]'].forEach(s=>doc.querySelectorAll(s).forEach(el=>el.remove()));
+  doc.querySelectorAll('meta,link').forEach(el=>{
+    if((el.getAttribute('content')||el.getAttribute('href')||'').includes('web.archive.org')) el.remove();
+  });
+  function cleanNode(n) {
+    if(n.nodeType!==1) return;
+    ['href','src','action','background'].forEach(attr=>{
+      const v=n.getAttribute(attr); if(!v) return;
+      let c=v.replace(ap,'');
+      if(c&&!c.startsWith('http')&&!c.startsWith('mailto')&&!c.startsWith('#')&&!c.startsWith('javascript'))
+        try{c=new URL(c,originalBase).href}catch(e){}
+      if(c!==v) n.setAttribute(attr,c);
+    });
+    Array.from(n.children).forEach(cleanNode);
+  }
+  cleanNode(doc.documentElement);
+  doc.querySelectorAll('[style]').forEach(el=>el.setAttribute('style',el.getAttribute('style').replace(ap,'')));
+  (function rc(n){Array.from(n.childNodes).forEach(c=>c.nodeType===8?c.remove():rc(c))})(doc.documentElement);
+  let base=doc.querySelector('base');
+  if(!base){base=doc.createElement('base');doc.head.insertBefore(base,doc.head.firstChild)}
+  base.setAttribute('href',originalBase);
+  if(!doc.querySelector('meta[charset]')){
+    const mc=doc.createElement('meta');mc.setAttribute('charset','UTF-8');
+    doc.head.insertBefore(mc,doc.head.firstChild);
+  }
+  return {html:'<!DOCTYPE html>\n'+doc.documentElement.outerHTML, doc, cssLinks};
+}
+
+// ─── EXTRACT ASSETS ───────────────────────────────────────────────
+const IMG_EXTS=/\.(gif|jpg|jpeg|png|bmp|ico|svg|tif|tiff|webp)(\?.*)?$/i;
+const FILE_EXTS=/\.(pdf|zip|tar|gz|doc|xls|csv|txt|js|css|exe|wav|mp3|mid|avi|mov|swf)(\?.*)?$/i;
+const isInfra=u=>u.includes('web-static.archive.org')||u.includes('archive.org/includes')||u.includes('archive.org/services/img');
+
+function extractAssets(rawDoc, rawHTML, originalBase, ts) {
+  const images=[],files=[],seen=new Set();
+  function resolveAttr(raw) {
+    if(!raw||raw.startsWith('data:')||raw.startsWith('javascript')||raw.startsWith('mailto')||raw==='#') return null;
+    raw=raw.split('#')[0].trim();
+    if(raw.startsWith('view-source:')) raw=raw.slice(12);
+    const mF=raw.match(/https?:\/\/web\.archive\.org\/web\/(\d+)[a-z_]*\/(https?:\/\/.+)/i);
+    if(mF) return {original:mF[2], archiveUrl:`https://web.archive.org/web/${mF[1]}im_/${mF[2]}`};
+    const mR=raw.match(/^\/web\/(\d+)[a-z_]*\/(https?:\/\/.+)/i);
+    if(mR) return {original:mR[2], archiveUrl:`https://web.archive.org/web/${mR[1]}im_/${mR[2]}`};
+    let orig=raw;
+    if(!orig.startsWith('http')) try{orig=new URL(orig,originalBase).href}catch(e){return null}
+    return {original:orig, archiveUrl:`https://web.archive.org/web/${ts}im_/${orig}`};
+  }
+  function addImg(raw) {
+    const r=resolveAttr(raw);
+    if(!r||seen.has(r.original)||isInfra(r.original)||isInfra(raw)) return;
+    seen.add(r.original);
+    images.push({...r, filename:r.original.split('/').pop().split('?')[0]||'image', status:'wait', blob:null});
+  }
+  function addFile(raw) {
+    const r=resolveAttr(raw);
+    if(!r||seen.has(r.original)||!FILE_EXTS.test(r.original)) return;
+    seen.add(r.original);
+    r.archiveUrl=`https://web.archive.org/web/${ts}/${r.original}`;
+    files.push({...r, filename:r.original.split('/').pop().split('?')[0]||'file', status:'wait', blob:null});
+  }
+  rawDoc.querySelectorAll('img[src]').forEach(el=>addImg(el.getAttribute('src')));
+  rawDoc.querySelectorAll('[background]').forEach(el=>addImg(el.getAttribute('background')));
+  const reAbs=/https?:\/\/web\.archive\.org\/web\/(\d+)[a-z_]*\/(https?:\/\/[^\s"'<>)]+)/gi;
+  const reRel=/["'=](\/web\/(\d+)[a-z_]*\/(https?:\/\/[^\s"'<>)]+))/gi;
+  let m;
+  while((m=reAbs.exec(rawHTML))!==null){
+    const orig=m[2].split(/["'\s<>)]/)[0].split('#')[0];
+    if(IMG_EXTS.test(orig)&&!seen.has(orig)&&!isInfra(orig)){
+      seen.add(orig);
+      images.push({original:orig, archiveUrl:`https://web.archive.org/web/${m[1]}im_/${orig}`,
+                   filename:orig.split('/').pop().split('?')[0]||'image', status:'wait', blob:null});
+    }
+  }
+  while((m=reRel.exec(rawHTML))!==null){
+    const ts2=m[2], orig=m[3].split(/["'\s<>)]/)[0].split('#')[0];
+    if(IMG_EXTS.test(orig)&&!seen.has(orig)&&!isInfra(orig)){
+      seen.add(orig);
+      images.push({original:orig, archiveUrl:`https://web.archive.org/web/${ts2}im_/${orig}`,
+                   filename:orig.split('/').pop().split('?')[0]||'image', status:'wait', blob:null});
+    }
+  }
+  rawDoc.querySelectorAll('a[href]').forEach(el=>addFile(el.getAttribute('href')));
+  return {images, files};
+}
+
+// ─── EXTRACT LINKS ────────────────────────────────────────────────
+function extractInternalLinks(rawDoc, rawHTML, originalBase, ts) {
+  const links=[],seen=new Set();
+  const baseHost=(()=>{try{return new URL(originalBase).hostname}catch(e){return ''}})();
+  rawDoc.querySelectorAll('a[href]').forEach(el=>{
+    const raw=el.getAttribute('href');
+    if(!raw||raw.startsWith('mailto')||raw.startsWith('javascript')||raw.startsWith('#')) return;
+    let archiveUrl, originalUrl;
+    if(raw.includes('web.archive.org/web/')){
+      const p=raw.match(/web\.archive\.org\/web\/(\d+)[a-z_]*\/(https?:\/\/.+)/i);
+      if(!p) return;
+      originalUrl=p[2].split('#')[0]; archiveUrl=`https://web.archive.org/web/${p[1]}/${originalUrl}`;
+    } else {
+      let orig=raw.replace(/https?:\/\/web\.archive\.org\/web\/\d+\//g,'');
+      if(!orig.startsWith('http')) try{orig=new URL(orig,originalBase).href}catch(e){return}
+      originalUrl=orig; archiveUrl=buildArchiveUrl(orig,ts);
+    }
+    if(!isRelevantPage(originalUrl,baseHost)) return;
+    if(FILE_EXTS.test(originalUrl)) return;
+    if(seen.has(originalUrl)) return;
+    seen.add(originalUrl);
+    links.push({archiveUrl, originalUrl});
+  });
+  return links;
+}
+
+// ─── GIF → PNG ────────────────────────────────────────────────────
+function blobToPng(blob) {
+  return new Promise((res,rej)=>{
+    const img=new Image(), u=URL.createObjectURL(blob);
+    img.onload=()=>{
+      const c=document.createElement('canvas');
+      c.width=img.naturalWidth||img.width; c.height=img.naturalHeight||img.height;
+      c.getContext('2d').drawImage(img,0,0);
+      URL.revokeObjectURL(u);
+      c.toBlob(b=>b?res(b):rej(new Error('toBlob failed')),'image/png');
+    };
+    img.onerror=()=>{URL.revokeObjectURL(u);rej(new Error('load failed'))};
+    img.src=u;
+  });
+}
+const pngName = f => f.replace(/\.(gif|bmp|ico|tiff?)$/i,'')+'.png';
+
+// ─── TREE ─────────────────────────────────────────────────────────
+function renderTree() {
+  const el = document.getElementById('tree-scroll');
+  const entries = Object.entries(pages);
+  const qs = queue.slice(0, 30);
+
+  // Store URL list on the element so click handlers can look up by index
+  el._urlList = entries.map(([url]) => url);
+
+  const nodes = entries.map(([url, p], i) => {
+    const short = (p.originalUrl||url).replace(globalBase,'').replace(/^\//, '') || '/';
+    const dc = p.status==='ok' ? 'dot-ok' : p.status==='fallback' ? 'dot-fallback' : p.status==='err' ? 'dot-err' : p.status==='crawling' ? 'dot-crawl' : 'dot-q';
+    const ac = url === currentPageUrl ? ' active' : p.status==='err' ? ' err' : p.status==='fallback' ? ' fallback' : '';
+    const kb = p.html ? (new Blob([p.html]).size/1024).toFixed(0)+'KB' : '';
+    const imgs = p.assets?.images?.length || '';
+    return `<div class="tree-node${ac}" data-idx="${i}">
+      <div class="dot ${dc}"></div>
+      <span class="tree-label" title="${(p.originalUrl||url).replace(/"/g,'&quot;')}">${short}</span>
+      <span class="tree-meta">${kb}${imgs?' · '+imgs+'🖼':''}</span>
+    </div>`;
+  });
+
+  const qnodes = qs.map(q => {
+    const p = parseArchiveUrl(q.url);
+    const short = p ? p.original.replace(globalBase,'').replace(/^\//, '') || '/' : q.url.slice(0,40);
+    return `<div class="tree-node" style="opacity:.3;pointer-events:none">
+      <div class="dot dot-q"></div><span class="tree-label">${short}</span>
+    </div>`;
+  });
+
+  el.innerHTML = [...nodes, ...qnodes].join('');
+
+  // Attach click handlers after innerHTML (avoids quote-escaping issues)
+  el.querySelectorAll('.tree-node[data-idx]').forEach(node => {
+    node.addEventListener('click', () => {
+      const url = el._urlList[parseInt(node.dataset.idx)];
+      if (url) showPage(url);
+    });
+  });
+}
+
+// ─── PAGE VIEWER ──────────────────────────────────────────────────
+function setView(v) {
+  currentView=v;
+  document.getElementById('vt-preview').className='vt-btn'+(v==='preview'?' active':'');
+  document.getElementById('vt-source').className='vt-btn'+(v==='source'?' active':'');
+  const frame=document.getElementById('preview-frame');
+  const src=document.getElementById('source-view');
+  if(v==='preview'){
+    frame.style.display='block';
+    src.style.display='none';
+  } else {
+    frame.style.display='none';
+    src.style.display='block';
+  }
+}
+
+function showPage(url) {
+  const p=pages[url];
+  if(!p||!p.html) { logLine('Seite hat keinen Inhalt.','l-warn'); return; }
+  currentPageUrl=url;
+
+  // Crumb
+  const orig=p.originalUrl||url;
+  try {
+    const u=new URL(orig);
+    const segs=[u.hostname, ...u.pathname.split('/').filter(Boolean)];
+    document.getElementById('preview-crumb').innerHTML =
+      segs.map((s,i)=>`<span class="seg">${s}</span>`).join('<span> / </span>');
+  } catch(e) {
+    document.getElementById('preview-crumb').textContent=orig;
+  }
+
+  // Hide empty state
+  document.getElementById('empty-state').style.display='none';
+
+  // Source view
+  document.getElementById('source-view').textContent=p.html;
+
+  // Preview
+  const frame=document.getElementById('preview-frame');
+  frame.srcdoc=p.html;
+
+  // Apply current view mode
+  setView(currentView);
+
+  // Buttons
+  document.getElementById('dl-page-btn').style.display='';
+  document.getElementById('dl-assets-btn').style.display='';
+
+  renderAssets();
+  renderTree();
+}
+
+// ─── ASSET TABS ───────────────────────────────────────────────────
+function showAssetTab(tab) {
+  currentAssetTab=tab;
+  document.getElementById('asset-list-images').style.display=tab==='images'?'':'none';
+  document.getElementById('asset-list-files').style.display =tab==='files' ?'':'none';
+  document.getElementById('atab-images').className='dtab'+(tab==='images'?' active':'');
+  document.getElementById('atab-files').className ='dtab'+(tab==='files' ?' active':'');
+}
+
+function renderAssets() {
+  if(!currentPageUrl) return;
+  const p=pages[currentPageUrl]; if(!p) return;
+  const imgs=p.assets.images, files=p.assets.files;
+  document.getElementById('acnt-images').textContent=imgs.length;
+  document.getElementById('acnt-files').textContent=files.length;
+  const okI=imgs.filter(a=>a.status==='ok').length;
+  const okF=files.filter(a=>a.status==='ok').length;
+  document.getElementById('asset-info').textContent=
+    `${okI}/${imgs.length} Bilder · ${okF}/${files.length} Dateien geladen`;
+  renderAssetList('images',imgs);
+  renderAssetList('files',files);
+}
+
+function renderAssetList(tab, list) {
+  const el=document.getElementById('asset-list-'+tab);
+  if(!list.length){
+    el.innerHTML=`<div class="asset-empty">Keine ${tab==='images'?'Bilder':'Dateien'} gefunden</div>`;
+    return;
+  }
+  el.innerHTML=list.map((a,i)=>{
+    const thumb=tab==='images'
+      ?(a.blob?`<img class="asset-thumb" src="${URL.createObjectURL(a.blob)}" alt="">`
+              :`<div class="asset-ph">🖼</div>`)
+      :`<div class="asset-ph">📄</div>`;
+    const sz=a.status==='ok'?`<span class="asset-sz sz-ok">${(a.blob.size/1024).toFixed(1)}KB</span>`
+              :a.status==='err'?`<span class="asset-sz sz-err">Fehler</span>`
+              :a.status==='loading'?`<span class="asset-sz sz-loading">...</span>`
+              :`<span class="asset-sz sz-wait">—</span>`;
+    const label=a.status==='ok'?'↓ erneut':'↓ Laden';
+    return `<div class="asset-row" id="arow-${tab}-${i}">
+      ${thumb}
+      <div class="asset-info">
+        <div class="asset-name">${a.filename}</div>
+        <div class="asset-url">${a.original}</div>
+      </div>
+      ${sz}
+      <button class="btn-xs" onclick="fetchOneAsset('${tab}',${i})">${label}</button>
+    </div>`;
+  }).join('');
+}
+
+// ─── ASSET FETCHING ───────────────────────────────────────────────
+async function fetchOneAsset(tab, idx, silent=false) {
+  if(!currentPageUrl) return;
+  const a=pages[currentPageUrl].assets[tab][idx];
+  a.status='loading';
+  renderAssets();
+  let blob=await fetchBinary(a.archiveUrl);
+  if(blob) {
+    // Auto-convert GIF/BMP/ICO → PNG
+    if(tab==='images' && /\.(gif|bmp|ico)$/i.test(a.filename)) {
+      try { blob=await blobToPng(blob); a.filename=pngName(a.filename); } catch(e) {}
+    }
+    a.blob=blob; a.status='ok';
+    if(!silent) {
+      const u=URL.createObjectURL(blob), l=document.createElement('a');
+      l.href=u; l.download=a.filename; l.click();
+      setTimeout(()=>URL.revokeObjectURL(u),2000);
+    }
+  } else { a.status='err'; }
+  renderAssets();
+}
+
+async function fetchAllAssets() {
+  if(!currentPageUrl) return;
+  const p=pages[currentPageUrl];
+  const all=[...p.assets.images.map((_,i)=>['images',i]),...p.assets.files.map((_,i)=>['files',i])];
+  for(let j=0;j<all.length;j++){
+    const [tab,i]=all[j];
+    await fetchOneAsset(tab,i,true);
+    document.getElementById('asset-prog').style.width=`${Math.round((j+1)/all.length*100)}%`;
+    await sleep(280);
+  }
+  renderAssets();
+}
+
+async function dlAllAssets() {
+  if(!currentPageUrl) return;
+  for(const a of [...pages[currentPageUrl].assets.images,...pages[currentPageUrl].assets.files].filter(a=>a.blob)){
+    const u=URL.createObjectURL(a.blob), l=document.createElement('a');
+    l.href=u; l.download=a.filename; l.click();
+    await sleep(150); URL.revokeObjectURL(u);
+  }
+}
+
+function dlCurrentPage() {
+  if(!currentPageUrl) return;
+  const p=pages[currentPageUrl]; if(!p) return;
+  const filename = p.localFilename || makeFilename(p.originalUrl);
+  const u=URL.createObjectURL(new Blob([p.html],{type:'text/html'})), l=document.createElement('a');
+  l.href=u; l.download=filename; l.click();
+}
+
+async function downloadAllPages() {
+  if (typeof JSZip === 'undefined') { alert('JSZip lädt noch.'); return; }
+
+  const okPages = Object.entries(pages).filter(([,p]) => p.status === 'ok' && p.html);
+  const fallbackPages = Object.entries(pages).filter(([,p]) => p.status === 'fallback' && p.html);
+  if (!okPages.length && !fallbackPages.length) { alert('Keine restaurierten Seiten vorhanden.'); return; }
+
+  const allPages = [...okPages, ...fallbackPages];
+  logLine(`ZIP wird erstellt — ${okPages.length} vollständig + ${fallbackPages.length} Fallback...`, 'l-info');
+
+  // 1. Build URL → local filename map
+  const urlMap = buildUrlMap(pages);
+
+  // Determine homepage filename (first/shallowest page)
+  const homePage = allPages.slice().sort((a,b) => (a[1].depth||0)-(b[1].depth||0))[0];
+  const homepageFile = urlMap[homePage[1].originalUrl] || 'index.html';
+  logLine(`Homepage: ${homepageFile}`, 'l-info');
+
+  // 2. Build assetMap: originalUrl → relative path in ZIP (e.g. "assets/logo.png")
+  //    Key = a.original (the real original URL before archive wrapping)
+  const assetMap = {};
+  const assetsSeen = new Set();
+  const zip = new JSZip();
+  const folder = zip.folder('website');
+
+  for (const [, p] of allPages) {
+    for (const a of [...(p.assets?.images || []), ...(p.assets?.files || [])]) {
+      if (!a.blob || assetsSeen.has(a.original)) continue;
+      assetsSeen.add(a.original);
+      const localPath = 'assets/' + a.filename;
+      assetMap[a.original] = localPath;
+      const canon = canonicalUrlKey(a.original);
+      if (!(canon in assetMap)) assetMap[canon] = localPath;
+      folder.file(localPath, a.blob);
+    }
+  }
+  logLine(`Assets: ${Object.keys(assetMap).length} gemappt`, 'l-info');
+
+  // 3. Rewrite each page and add to ZIP
+  for (const [, p] of allPages) {
+    const localName = urlMap[p.originalUrl] || makeFilename(p.originalUrl);
+    const offlineHtml = rewriteLinksForOffline(
+      p.html, urlMap, assetMap, p.originalUrl, homepageFile
+    );
+    folder.file(localName, offlineHtml);
+  }
+
+  // 4. Add a static index page at root level
+  const rootIndex = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8">` +
+    `<title>Restaurierte Website</title></head><body>` +
+    `<p><a href="${homepageFile}">Zur Startseite</a></p>` +
+    `</body></html>`;
+  zip.file('index.html', rootIndex);
+
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+  const u = URL.createObjectURL(blob);
+  const l = document.createElement('a');
+  l.href = u; l.download = 'wayback-restauriert.zip'; l.click();
+  setTimeout(() => URL.revokeObjectURL(u), 3000);
+  logLine(`✓ ZIP: ${okPages.length} vollständig + ${fallbackPages.length} Fallback + ${Object.keys(assetMap).length} Assets`, 'l-ok');
+}
+
+
+// ─── URL → FILENAME MAPPING ─────────────────────────────────────────
+function makeFilename(originalUrl) {
+  try {
+    const u = new URL(originalUrl);
+    let path = u.pathname.replace(/^\//, '').replace(/\/$/, '') || 'index';
+    // Clean path to safe filename
+    path = path.replace(/[^a-z0-9._-]/gi, '_').replace(/_+/g, '_');
+    if (!path.endsWith('.html') && !path.endsWith('.htm')) path += '.html';
+    return path;
+  } catch(e) {
+    return 'index.html';
+  }
+}
+
+function canonicalUrlKey(url) {
+  if (!url) return '';
+  try {
+    const u = new URL(url);
+    u.hash = '';
+    u.hostname = u.hostname.toLowerCase();
+    u.protocol = u.protocol.toLowerCase();
+    u.pathname = u.pathname.replace(/\/+$/, '') || '/';
+    return u.href;
+  } catch (e) {
+    return String(url).split('#')[0].trim();
+  }
+}
+
+function lookupMappedValue(map, url) {
+  if (!url) return null;
+  return map[url] || map[canonicalUrlKey(url)] || null;
+}
+
+function buildUrlMap(pages) {
+  // Map originalUrl -> local filename, ensuring no collisions
+  const map = {}, usedNames = new Set();
+  for (const [archiveUrl, p] of Object.entries(pages)) {
+    if (p.status !== 'ok') continue;
+    let name = makeFilename(p.originalUrl);
+    // Handle collisions
+    if (usedNames.has(name)) {
+      const base = name.replace(/\.html$/, '');
+      let i = 2;
+      while (usedNames.has(`${base}_${i}.html`)) i++;
+      name = `${base}_${i}.html`;
+    }
+    usedNames.add(name);
+    map[p.originalUrl] = name;
+    const canon = canonicalUrlKey(p.originalUrl);
+    if (!(canon in map)) map[canon] = name;
+  }
+  return map;
+}
+
+function rewriteLinksForOffline(html, urlMap, assetMap, thisOriginalUrl, homepageFile) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const pageHost = (() => { try { return new URL(thisOriginalUrl).hostname.toLowerCase(); } catch(e) { return ''; } })();
+
+  // Remove <base> — breaks local navigation
+  doc.querySelectorAll('base').forEach(el => el.remove());
+
+  function toAbs(href) {
+    if (!href) return null;
+    try { return new URL(href, thisOriginalUrl).href; } catch(e) { return null; }
+  }
+
+  function disableLink(el, reason='offline') {
+    const span = doc.createElement('span');
+    Array.from(el.attributes).forEach(attr => {
+      if (attr.name === 'href') return;
+      span.setAttribute(attr.name, attr.value);
+    });
+    const title = el.getAttribute('title');
+    if (title) span.setAttribute('title', title.replace(/\s*\[.*?\]\s*$/, '') + ' [offline nicht verfügbar]');
+    const href = el.getAttribute('href');
+    if (href) span.setAttribute('data-original-href', href);
+    span.setAttribute('data-disabled-link', reason);
+    span.setAttribute('aria-disabled', 'true');
+    span.classList.add('offline-link');
+    while (el.firstChild) span.appendChild(el.firstChild);
+    el.replaceWith(span);
+  }
+
+  // ── <a href> ────────────────────────────────────────────────────
+  doc.querySelectorAll('a[href]').forEach(el => {
+    const href = el.getAttribute('href');
+    if (!href || href.startsWith('#')) return;
+    if (href.startsWith('mailto:') || href.startsWith('javascript:') || href.startsWith('tel:') || href.startsWith('ftp:') || href.startsWith('news:')) {
+      disableLink(el, 'external');
+      return;
+    }
+
+    const hash = href.includes('#') ? href.slice(href.indexOf('#')) : '';
+    const abs  = toAbs(href.split('#')[0]);
+    if (!abs) { disableLink(el, 'unresolved'); return; }
+
+    const absHost = (() => { try { return new URL(abs).hostname.toLowerCase(); } catch(e) { return ''; } })();
+    const mapped = lookupMappedValue(urlMap, abs);
+    if (mapped) {
+      el.setAttribute('href', mapped + hash);
+      return;
+    }
+
+    // Any external or uncrawled target is disabled instead of being rerouted.
+    if (absHost && pageHost && absHost !== pageHost) {
+      disableLink(el, 'external');
+      return;
+    }
+    disableLink(el, 'missing');
+  });
+
+  // ── <img src> ───────────────────────────────────────────────────
+  doc.querySelectorAll('img[src]').forEach(el => {
+    const src = el.getAttribute('src');
+    if (!src || src.startsWith('data:')) return;
+    const abs = toAbs(src);
+    const mapped = abs ? lookupMappedValue(assetMap, abs) : null;
+    if (mapped) {
+      el.setAttribute('src', mapped);
+    } else {
+      el.removeAttribute('src');
+      el.setAttribute('alt', el.getAttribute('alt') || '[Bild nicht verfügbar]');
+    }
+  });
+
+  // ── background= (table/td/body — typisch 1997) ─────────────────
+  doc.querySelectorAll('[background]').forEach(el => {
+    const bg  = el.getAttribute('background');
+    const abs = toAbs(bg);
+    const mapped = abs ? lookupMappedValue(assetMap, abs) : null;
+    if (mapped) el.setAttribute('background', mapped);
+    else el.removeAttribute('background');
+  });
+
+  // ── <link rel="stylesheet"> ─────────────────────────────────────
+  doc.querySelectorAll('link[rel~="stylesheet"][href]').forEach(el => {
+    const abs = toAbs(el.getAttribute('href'));
+    const mapped = abs ? lookupMappedValue(assetMap, abs) : null;
+    if (mapped) el.setAttribute('href', mapped);
+    else el.remove();
+  });
+
+  // ── inline style url(...) ───────────────────────────────────────
+  doc.querySelectorAll('[style]').forEach(el => {
+    el.setAttribute('style', el.getAttribute('style').replace(
+      /url\(['"]?(https?:\/\/[^'"\)\s]+)['"]?\)/gi,
+      (_, u) => { const abs = toAbs(u); const mapped = abs ? lookupMappedValue(assetMap, abs) : null; return mapped ? `url(${mapped})` : 'none'; }
+    ));
+  });
+
+  // ── <style> tag url(...) ─────────────────────────────────────────
+  doc.querySelectorAll('style').forEach(el => {
+    el.textContent = el.textContent.replace(
+      /url\(['"]?(https?:\/\/[^'"\)\s]+)['"]?\)/gi,
+      (_, u) => { const abs = toAbs(u); const mapped = abs ? lookupMappedValue(assetMap, abs) : null; return mapped ? `url(${mapped})` : 'none'; }
+    );
+  });
+
+  return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+}
+
+
+// ─── AUTO ASSET FETCH ────────────────────────────────────────────
+async function fetchAssetsForPage(url) {
+  const p = pages[url];
+  if (!p || !p.assets) return;
+  const all = [...p.assets.images, ...p.assets.files];
+  if (all.length === 0) return;
+  logLine(`  📦 ${all.length} Assets werden geladen...`, 'l-info');
+  let ok = 0, fail = 0;
+  for (const a of all) {
+    if (a.status === 'ok') { ok++; continue; }
+    let blob = await fetchBinary(a.archiveUrl);
+    if (blob) {
+      // Auto-convert GIF/BMP/ICO → PNG
+      if (/\.(gif|bmp|ico)$/i.test(a.filename)) {
+        try { blob = await blobToPng(blob); a.filename = pngName(a.filename); } catch(e) {}
+      }
+      a.blob = blob; a.status = 'ok'; ok++;
+    } else {
+      a.status = 'err'; fail++;
+    }
+    // Small delay to avoid rate limiting
+    await sleep(200);
+  }
+  logLine(`  ✓ Assets: ${ok} geladen${fail ? ', ' + fail + ' fehlgeschlagen' : ''}`, fail ? 'l-warn' : 'l-ok');
+  // Update progress display if this is the current page
+  if (url === currentPageUrl) renderAssets();
+}
+
+// ─── CRAWLER ──────────────────────────────────────────────────────
+async function startCrawl() {
+  const startUrl=document.getElementById('url-input').value.trim();
+  if(!startUrl.includes('web.archive.org')){alert('Bitte eine archive.org-URL eingeben.');return}
+  const maxDepth=parseInt(document.getElementById('depth-input').value)||2;
+  const maxPages=parseInt(document.getElementById('max-input').value)||30;
+  const parsed=parseArchiveUrl(startUrl);
+  if(!parsed){alert('URL konnte nicht geparst werden.');return}
+
+  globalTimestamp=parsed.ts;
+  globalBase=(()=>{try{const u=new URL(parsed.original);return u.origin+'/'}catch(e){return parsed.original}})();
+  const baseHost=(()=>{try{return new URL(globalBase).hostname}catch(e){return ''}})();
+
+  // Reset UI
+  pages={}; queue=[]; visited=new Set(); currentPageUrl=null;
+  clearLog();
+  document.getElementById('tree-scroll').innerHTML='';
+  const _f=document.getElementById('preview-frame');
+  _f.srcdoc=''; _f.style.display='none';
+  document.getElementById('source-view').textContent='';
+  document.getElementById('source-view').style.display='none';
+  document.getElementById('empty-state').style.display='';
+  document.getElementById('preview-crumb').textContent='Lädt...';
+  document.getElementById('dl-page-btn').style.display='none';
+  document.getElementById('dl-assets-btn').style.display='none';
+  document.getElementById('zip-btn').style.display='none';
+  document.getElementById('asset-info').textContent='—';
+  document.getElementById('asset-prog').style.width='0%';
+  document.getElementById('start-btn').disabled=true;
+  document.getElementById('stop-btn').disabled=false;
+  crawling=true; stopRequested=false;
+
+  queue.push({url:startUrl, depth:0});
+  logLine(`Starte: ${startUrl}`, 'l-new');
+  logLine(`Tiefe: ${maxDepth} · Max. Seiten: ${maxPages}`, 'l-info');
+
+  while(queue.length>0 && !stopRequested) {
+    const {url, depth}=queue.shift();
+    if(visited.has(url)) continue;
+    visited.add(url);
+
+    if(Object.keys(pages).length>=maxPages){logLine(`Max. ${maxPages} Seiten erreicht.`,'l-warn');break}
+
+    const p2=parseArchiveUrl(url); if(!p2) continue;
+    const originalUrl=p2.original;
+
+    if(!isRelevantPage(originalUrl, baseHost)){
+      logLine(`⊘ Skip: ${originalUrl.slice(0,70)}`,'l-skip'); continue;
+    }
+
+    const short=originalUrl.replace(globalBase,'').replace(/^\//,'')||'/';
+    pages[url]={html:'',doc:null,assets:{images:[],files:[]},status:'crawling',depth,originalUrl};
+    updateStats(); renderTree();
+    logLine(`[${depth}] ${short}`,'l-info');
+
+    try {
+      const raw=await fetchText(url);
+      const rawDoc=new DOMParser().parseFromString(raw,'text/html');
+      const {html:rawHtml, doc, cssLinks}=cleanHTML(raw,originalUrl);
+      const thisTs=p2.ts||globalTimestamp;
+      const assets=extractAssets(rawDoc,raw,originalUrl,thisTs);
+
+      // Fetch and inline external CSS
+      let finalHtml=rawHtml;
+      if(cssLinks && cssLinks.length>0){
+        const parser=new DOMParser();
+        const finalDoc=parser.parseFromString(rawHtml,'text/html');
+        for(const {rawHref, cleanedHref, archiveHref} of cssLinks){
+          logLine(`  🎨 CSS laden: ${archiveHref.split('/').pop().split('?')[0]}`,'l-info');
+          try {
+            const cssText=await fetchText(archiveHref);
+            if(cssText){
+              // Replace <link> with inline <style>
+              const styleEl=finalDoc.createElement('style');
+              // Clean archive URLs from CSS content too
+              const cleanCss=cssText
+                .replace(/https?:\/\/web\.archive\.org\/web\/[^/]+\//g,'')
+                .replace(/url\(['"]?\/web\/\d+[a-z_]*\/(https?:\/\/[^'")\s]+)['"]?\)/gi,
+                         (m,orig)=>`url(${orig})`);
+              styleEl.textContent=cleanCss;
+              // Find and replace the link in finalDoc — try cleaned href first, then any stylesheet
+              const linkInFinal=
+                finalDoc.querySelector(`link[href="${cleanedHref}"]`) ||
+                finalDoc.querySelector(`link[href="${rawHref}"]`) ||
+                finalDoc.querySelector('link[rel~="stylesheet"]');
+              if(linkInFinal) linkInFinal.replaceWith(styleEl);
+              else finalDoc.head.appendChild(styleEl);
+            }
+          } catch(e){
+            logLine(`  ⚠ CSS fehlgeschlagen: ${e.message}`,'l-warn');
+            // Remove dead link rather than leaving a broken request
+            const dead=finalDoc.querySelector(`link[href="${cleanedHref}"]`)||
+                        finalDoc.querySelector(`link[href="${rawHref}"]`);
+            if(dead) dead.remove();
+          }
+          await sleep(300);
+        }
+        finalHtml='<!DOCTYPE html>\n'+finalDoc.documentElement.outerHTML;
+      }
+
+      pages[url]={html:finalHtml,doc,assets,status:'ok',depth,originalUrl};
+      const sz=(new Blob([finalHtml]).size/1024).toFixed(1);
+      logLine(`✓ ${short}  ${sz}KB · ${assets.images.length}🖼`,'l-ok');
+
+      if(!currentPageUrl) showPage(url);
+
+      // Auto-fetch ALL assets immediately so ZIP is fully offline
+      await fetchAssetsForPage(url);
+
+      if(depth<maxDepth){
+        const links=extractInternalLinks(rawDoc,raw,originalUrl,thisTs);
+        let added=0;
+        for(const link of links){
+          const aqd=queue.find(q=>{const p=parseArchiveUrl(q.url);return p&&p.original===link.originalUrl});
+          const avs=[...visited].some(v=>{const p=parseArchiveUrl(v);return p&&p.original===link.originalUrl});
+          if(!avs&&!aqd){queue.push({url:link.archiveUrl,depth:depth+1});added++}
+        }
+        if(added>0) logLine(`  + ${added} Links entdeckt`,'l-new');
+      }
+    } catch(err) {
+       // Generate fallback HTML with link to archive.org
+       const archiveHtml = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8">` +
+         `<meta name="viewport" content="width=device-width, initial-scale=1">` +
+         `<title>${short}</title>` +
+         `<style>body{font-family:sans-serif;margin:40px;line-height:1.6;color:#333}` +
+         `.warning{background:#fff3cd;border:1px solid #ffc107;padding:16px;border-radius:4px;margin-bottom:20px}` +
+         `a{color:#0066cc;text-decoration:none}a:hover{text-decoration:underline}</style>` +
+         `</head><body>` +
+         `<div class="warning"><strong>⚠ Seite nicht verfügbar</strong><br>` +
+         `Diese Seite konnte lokal nicht restauriert werden (nach ${MAX_RETRIES} Versuchen).</div>` +
+         `<h1>${short}</h1>` +
+         `<p><strong>Original-URL:</strong> ${originalUrl}</p>` +
+         `<p><a href="https://web.archive.org/web/${thisTs}/${originalUrl}" target="_blank">` +
+         `→ Auf archive.org anschauen</a></p>` +
+         `</body></html>`;
+       pages[url]={html:archiveHtml,doc:null,assets:{images:[],files:[]},status:'fallback',depth,originalUrl};
+       logLine(`⚠ ${short}: ${err.message} → Fallback erzeugt`,'l-warn');
+    }
+
+    updateStats(); renderTree();
+    await sleep(pages[url]?.status==='err'?2500:850);
+  }
+
+  crawling=false;
+  document.getElementById('start-btn').disabled=false;
+  document.getElementById('stop-btn').disabled=true;
+  const ok=Object.values(pages).filter(p=>p.status==='ok').length;
+  const err=Object.values(pages).filter(p=>p.status==='err').length;
+  logLine(`── Fertig: ${ok} restauriert · ${err} Fehler ──`,'l-warn');
+
+  if(ok>0){
+    document.getElementById('zip-btn').style.display='';
+    logLine('✓ Bereit — ZIP exportieren für vollständiges Offline-Archiv','l-ok');
+  }
+}
+
+function stopCrawl(){
+  stopRequested=true;
+  logLine('Gestoppt.','l-warn');
+}
+</script>
+</body>
+</html>
